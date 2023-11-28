@@ -11,9 +11,15 @@ class MyDataSet(Dataset):
         self.images_class = images_class
         self.transform = transform
 
+    # __len__ 和 __getitem__
+    # dataset定义了这两个方法之后，其实变相是支持了 [idx] 和 len 的切片与取长度的操作
+
     def __len__(self):
         return len(self.images_path)
 
+    # 返回与指定键相关联的值
+    # 对序列来说（通常是列表），键应该是0~n-1的整数，其中n为序列的长度。
+    # 对映射来说（通常是字典），键可以是任何类型。
     def __getitem__(self, item):
         img = Image.open(self.images_path[item])
         # RGB为彩色图片，L为灰度图片
@@ -22,8 +28,7 @@ class MyDataSet(Dataset):
         label = self.images_class[item]
 
         if self.transform is not None:
-            img = self.transform(img)
-
+            img = self.transform(img) # compose容器中的变换内容
         return img, label
 
     @staticmethod
