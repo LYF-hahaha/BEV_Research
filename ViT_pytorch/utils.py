@@ -3,24 +3,35 @@ import sys
 import json
 import pickle
 import random
-
 import torch
 from tqdm import tqdm
-
 import matplotlib.pyplot as plt
+
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1' # 下面老是报错 shape 不一致
 
 
 def read_split_data(root: str, val_rate: float = 0.2):
+    # python中的随机函数
+    # 指定一次随机种子，可使后面的紧跟着的一个random调用每次生成的随机数是一样的
     random.seed(0)  # 保证随机结果可复现
+
+    # 断言 不然就返回逗号后面的内容
+    # {}是占位符
     assert os.path.exists(root), "dataset root: {} does not exist.".format(root)
 
     # 遍历文件夹，一个文件夹对应一个类别
+    # python的列表生成（将root下的每一种花的文件夹生成一个List）
     flower_class = [cla for cla in os.listdir(root) if os.path.isdir(os.path.join(root, cla))]
     # 排序，保证各平台顺序一致
     flower_class.sort()
-    # 生成类别名称以及对应的数字索引
+    # 生成类别名称以及对应的数字索引（enumerate返回数字索引）
     class_indices = dict((k, v) for v, k in enumerate(flower_class))
+    # 将python对象编码成json字符串
+    # 参数一指定内容
+    # 参数二指定首行缩进
     json_str = json.dumps(dict((val, key) for key, val in class_indices.items()), indent=4)
+    # 写入json文件
     with open('./00_storage/class_indices.json', 'w') as json_file:
         json_file.write(json_str)
 
@@ -34,21 +45,23 @@ def read_split_data(root: str, val_rate: float = 0.2):
     for cla in flower_class:
         cla_path = os.path.join(root, cla)
         # 遍历获取supported支持的所有文件路径
+        # i是每类花的文件夹中所有支持格式的文件名
         images = [os.path.join(root, cla, i) for i in os.listdir(cla_path)
                   if os.path.splitext(i)[-1] in supported]
         # 排序，保证各平台顺序一致
         images.sort()
-        # 获取该类别对应的索引
+        # 获取该类别对应的索引号（用值查键）
         image_class = class_indices[cla]
         # 记录该类别的样本数量
         every_class_num.append(len(images))
-        # 按比例随机采样验证样本
+        # 按比例随机采样验证样本（前面指定了随机种子，确保一致）
+        # 随机从images的文件路径list中选取k个文件路径，作为val set成员
         val_path = random.sample(images, k=int(len(images) * val_rate))
 
         for img_path in images:
             if img_path in val_path:  # 如果该路径在采样的验证集样本中则存入验证集
                 val_images_path.append(img_path)
-                val_images_label.append(image_class)
+                val_images_label.append(image_class)  # 按花的文件夹来的，所以类别序号是一样的
             else:  # 否则存入训练集
                 train_images_path.append(img_path)
                 train_images_label.append(image_class)
@@ -56,18 +69,23 @@ def read_split_data(root: str, val_rate: float = 0.2):
     print("{} images were found in the dataset.".format(sum(every_class_num)))
     print("{} images for training.".format(len(train_images_path)))
     print("{} images for validation.".format(len(val_images_path)))
+    # 断言 如果小于等于0，就输出后面的内容
     assert len(train_images_path) > 0, "number of training images must greater than 0."
     assert len(val_images_path) > 0, "number of validation images must greater than 0."
 
     plot_image = False
     if plot_image:
         # 绘制每种类别个数柱状图
-        plt.bar(range(len(flower_class)), every_class_num, align='center')
+        plt.bar(range(len(flower_class)),  # x轴刻度
+                every_class_num,           # y轴刻度
+                align='center')            #
         # 将横坐标0,1,2,3,4替换为相应的类别名称
         plt.xticks(range(len(flower_class)), flower_class)
         # 在柱状图上添加数值标签
         for i, v in enumerate(every_class_num):
-            plt.text(x=i, y=v + 5, s=str(v), ha='center')
+            plt.text(x=i, y=v + 5,  # 字的位置
+                     s=str(v),  # 字的内容
+                     ha='center')
         # 设置x坐标
         plt.xlabel('image class')
         # 设置y坐标
@@ -116,24 +134,32 @@ def read_pickle(file_name: str) -> list:
 
 
 def train_one_epoch(model, optimizer, data_loader, device, epoch):
+    # 模型切换到训练模式
     model.train()
-    loss_function = torch.nn.CrossEntropyLoss()
+    loss_function = torch.nn.CrossEntropyLoss() # 指定损失函数
     accu_loss = torch.zeros(1).to(device)  # 累计损失
     accu_num = torch.zeros(1).to(device)   # 累计预测正确的样本数
-    optimizer.zero_grad()
+    optimizer.zero_grad() # 梯度归零
 
     sample_num = 0
     data_loader = tqdm(data_loader, file=sys.stdout)
     for step, data in enumerate(data_loader):
         images, labels = data
         sample_num += images.shape[0]
-
+        # 在GPU上用模型预测一次
         pred = model(images.to(device))
+        # torch.max()这个函数返回的是两个值
+        # 第一个值是具体的value（我们用下划线_表示），第二个值是value所在的index（也就是predicted）
         pred_classes = torch.max(pred, dim=1)[1]
+        # pred正确的数量和labels对比
         accu_num += torch.eq(pred_classes, labels.to(device)).sum()
 
         loss = loss_function(pred, labels.to(device))
+        # 反向传播
         loss.backward()
+        # detach() 方法用于返回一个新的 Tensor
+        # 这个 Tensor 和原来的 Tensor 共享相同的内存空间，但是不会被计算图所追踪
+        # 也就是说它不会参与反向传播，不会影响到原有的计算图，这使得它成为处理中间结果的一种有效方式
         accu_loss += loss.detach()
 
         data_loader.desc = "[train epoch {}] loss: {:.3f}, acc: {:.3f}".format(epoch,
@@ -144,7 +170,12 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch):
             print('WARNING: non-finite loss, ending training ', loss)
             sys.exit(1)
 
+        # 优化器对x值的更新
+        # 即 x=x+lr*x.grad()
         optimizer.step()
+
+        # 清除了优化器中所有x的梯度
+        # 在loss.backward()之前使用，不然梯度会积累
         optimizer.zero_grad()
 
     return accu_loss.item() / (step + 1), accu_num.item() / sample_num
@@ -154,12 +185,13 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch):
 def evaluate(model, data_loader, device, epoch):
     loss_function = torch.nn.CrossEntropyLoss()
 
-    model.eval()
+    model.eval() # 评价模式（没有梯度回传）
 
     accu_num = torch.zeros(1).to(device)   # 累计预测正确的样本数
     accu_loss = torch.zeros(1).to(device)  # 累计损失
 
     sample_num = 0
+    # 进度条显示
     data_loader = tqdm(data_loader, file=sys.stdout)
     for step, data in enumerate(data_loader):
         images, labels = data
@@ -175,5 +207,8 @@ def evaluate(model, data_loader, device, epoch):
         data_loader.desc = "[valid epoch {}] loss: {:.3f}, acc: {:.3f}".format(epoch,
                                                                                accu_loss.item() / (step + 1),
                                                                                accu_num.item() / sample_num)
+        # 没有更新的步骤，即
+        # optimizer.step()
+        # optimizer.zero_grad()
 
     return accu_loss.item() / (step + 1), accu_num.item() / sample_num

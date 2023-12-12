@@ -21,7 +21,9 @@ def main(args):
 
     tb_writer = SummaryWriter()
 
-    # 自定义的函数
+    # 将root中按花的类别分文件夹存储的所有图片进行类别和训练or验证集的划分，并作为列表返回
+    # 列表的元素是每个图片的完整路径
+    # 同时，还可选是否可视化统计结果
     train_images_path, train_images_label, val_images_path, val_images_label = read_split_data(args.data_path)
 
     data_transform = {
@@ -126,7 +128,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--num_classes', type=int, default=5)
-    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('--epochs', type=int, default=3)
     parser.add_argument('--batch-size', type=int, default=8)
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--lrf', type=float, default=0.01)

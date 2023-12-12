@@ -18,14 +18,14 @@ def main():
          transforms.ToTensor(),
          transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
 
-    # load image
+    # 输入待识别图像
     img_path = "./00_storage/flower_photos/00_new_for_prediction/bronco.jpg"
     assert os.path.exists(img_path), "file: '{}' dose not exist.".format(img_path)
     img = Image.open(img_path)
     plt.imshow(img)
     # [N, C, H, W]
     img = data_transform(img)
-    # expand batch dimension
+    # expand batch dimension （在dim0处增加一个维度）
     img = torch.unsqueeze(img, dim=0)
 
     # read class_indict
@@ -43,10 +43,15 @@ def main():
     model.eval()
     with torch.no_grad():
         # predict class
+        # 将输入张量形状中的1 去除并返回
+        # 如果输入是形如(A×1×B×1×C×1×D)，那么输出形状就为： (A×B×C×D)
         output = torch.squeeze(model(img.to(device))).cpu()
+        # 每个位置的概率计算
         predict = torch.softmax(output, dim=0)
+        # PyTorch中用来返回指定维度最大值的序号的函数
         predict_cla = torch.argmax(predict).numpy()
 
+    # 用pred_cal序号去相应的list取对应内容
     print_res = "class: {}   prob: {:.3}".format(class_indict[str(predict_cla)],
                                                  predict[predict_cla].numpy())
     plt.title(print_res)
